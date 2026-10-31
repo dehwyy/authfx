@@ -52,6 +52,9 @@ func New(cfg Config) (*Verifier, error) {
 		legacy:     cfg.LegacyStaffInClient,
 		client: &http.Client{
 			Timeout: cfg.HTTPTimeout,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 		cacheTTL:  cfg.CacheTTL,
 		negTTL:    cfg.NegativeCacheTTL,

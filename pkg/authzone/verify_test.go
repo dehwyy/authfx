@@ -542,3 +542,73 @@ func TestVerify_CachesPositiveAndNegative(t *testing.T) {
 		require.Equal(t, int32(4), s.client.calls.Load())
 	})
 }
+
+func singleInstanceConfig(
+	issuer string,
+	baseURL string,
+) authzone.Config {
+	return authzone.Config{
+		Instances: []authzone.Instance{
+			{
+				Zone:      authzone.ZoneClient,
+				Issuer:    issuer,
+				URL:       baseURL,
+				ClientID:  "cid",
+				ProjectID: "pid",
+			},
+		},
+	}
+}
+
+func TestVerify_RedirectNotFollowed(t *testing.T) {
+	target := newProvider(t, "target", nil)
+	target.respond(http.StatusOK, map[string]any{
+		"active": true,
+		"iss":    "https://auth.example.test",
+	})
+
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.server.URL+"/oauth/v2/introspect", http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(redirector.Close)
+
+	verifier, err := authzone.New(singleInstanceConfig("https://auth.example.test", redirector.URL))
+	require.NoError(t, err)
+
+	principal, err := verifier.Verify(context.Background(), "secret-token")
+
+	require.ErrorIs(t, err, authzone.ErrProvider)
+	require.Nil(t, principal)
+	require.Equal(t, int32(0), target.calls.Load())
+}
+
+func TestVerify_TimeoutIsProviderError(t *testing.T) {
+	release := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release
+	}))
+	t.Cleanup(slow.Close)
+	t.Cleanup(func() { close(release) })
+
+	cfg := singleInstanceConfig(slow.URL, "")
+	cfg.HTTPTimeout = 50 * time.Millisecond
+	verifier, err := authzone.New(cfg)
+	require.NoError(t, err)
+
+	_, err = verifier.Verify(context.Background(), "opaque")
+
+	require.ErrorIs(t, err, authzone.ErrProvider)
+	require.NotErrorIs(t, err, authzone.ErrUnauthenticated)
+}
+
+func TestVerify_CanceledContextIsProviderError(t *testing.T) {
+	s := newStand(t, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := s.verifier(t, false).Verify(ctx, "opaque")
+
+	require.ErrorIs(t, err, authzone.ErrProvider)
+	require.NotErrorIs(t, err, authzone.ErrUnauthenticated)
+	require.Equal(t, int32(0), s.client.calls.Load())
+}
