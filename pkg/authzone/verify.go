@@ -27,6 +27,8 @@ func (v *Verifier) Verify(
 			return nil, ErrUnauthenticated
 		}
 
+		countLegacy(entry.principal)
+
 		return entry.principal.clone(), nil
 	}
 
@@ -64,6 +66,8 @@ func (v *Verifier) Verify(
 		resolved.principal,
 		v.positiveTTL(resolved.exp),
 	)
+
+	countLegacy(resolved.principal)
 
 	return resolved.principal.clone(), nil
 }

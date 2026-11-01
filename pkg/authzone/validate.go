@@ -14,7 +14,7 @@ func validateConfig(cfg Config) error {
 		)
 	}
 
-	if cfg.CacheTTL < 0 || cfg.NegativeCacheTTL < 0 || cfg.CacheSize < 0 || cfg.HTTPTimeout < 0 {
+	if cfg.CacheTTL < 0 || cfg.NegativeCacheTTL < 0 || cfg.CacheSize < 0 || cfg.HTTPTimeout < 0 || cfg.BreakerThreshold < 0 || cfg.BreakerOpenFor < 0 {
 		return fmt.Errorf(
 			"%w: negative cache or timeout setting",
 			ErrInvalidConfig,

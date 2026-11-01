@@ -6,6 +6,8 @@ const (
 	defaultNegativeCacheTTL = 5 * time.Second
 	defaultCacheSize        = 4096
 	defaultHTTPTimeout      = 10 * time.Second
+	defaultBreakerThreshold = 5
+	defaultBreakerOpenFor   = 30 * time.Second
 )
 
 type Instance struct {
@@ -31,4 +33,6 @@ type Config struct {
 	NegativeCacheTTL    time.Duration
 	CacheSize           int
 	HTTPTimeout         time.Duration
+	BreakerThreshold    int
+	BreakerOpenFor      time.Duration
 }

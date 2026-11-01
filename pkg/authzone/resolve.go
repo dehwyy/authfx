@@ -20,16 +20,31 @@ func (v *Verifier) resolve(
 	var providerErr error
 
 	for _, instance := range v.route(token) {
+		guard := v.breakers[normalizeIssuer(instance.Issuer)]
+		if !guard.allow() {
+			providerErr = fmt.Errorf(
+				"%w: %s circuit open",
+				ErrProvider,
+				instance.Zone,
+			)
+
+			continue
+		}
+
 		parsed, err := v.introspect(
 			ctx,
 			instance,
 			token,
 		)
 		if err != nil {
+			guard.fail()
+
 			providerErr = err
 
 			continue
 		}
+
+		guard.succeed()
 
 		if !parsed.active {
 			continue

@@ -15,6 +15,7 @@ type Verifier struct {
 	negTTL     time.Duration
 	cacheSize  int
 	now        func() time.Time
+	breakers   map[string]*breaker
 
 	mu    sync.Mutex
 	cache map[string]cacheEntry
@@ -37,6 +38,14 @@ func New(cfg Config) (*Verifier, error) {
 		cfg.HTTPTimeout = defaultHTTPTimeout
 	}
 
+	if cfg.BreakerThreshold == 0 {
+		cfg.BreakerThreshold = defaultBreakerThreshold
+	}
+
+	if cfg.BreakerOpenFor == 0 {
+		cfg.BreakerOpenFor = defaultBreakerOpenFor
+	}
+
 	instances := make(
 		[]Instance,
 		len(cfg.Instances),
@@ -46,7 +55,7 @@ func New(cfg Config) (*Verifier, error) {
 		cfg.Instances,
 	)
 
-	return &Verifier{
+	verifier := &Verifier{
 		instances:  instances,
 		staffRoles: cfg.StaffRoles,
 		legacy:     cfg.LegacyStaffInClient,
@@ -61,5 +70,18 @@ func New(cfg Config) (*Verifier, error) {
 		cacheSize: cfg.CacheSize,
 		now:       time.Now,
 		cache:     make(map[string]cacheEntry),
-	}, nil
+		breakers:  make(map[string]*breaker, len(instances)),
+	}
+
+	for _, instance := range instances {
+		verifier.breakers[normalizeIssuer(instance.Issuer)] = &breaker{
+			threshold: cfg.BreakerThreshold,
+			openFor:   cfg.BreakerOpenFor,
+			now: func() time.Time {
+				return verifier.now()
+			},
+		}
+	}
+
+	return verifier, nil
 }
