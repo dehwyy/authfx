@@ -422,6 +422,53 @@ func TestVerify_MetadataDecoded(t *testing.T) {
 	require.Equal(t, s.client.server.URL, principal.Issuer)
 }
 
+func TestVerify_MetadataAcceptsEveryBase64Spelling(t *testing.T) {
+	values := map[string][]byte{
+		"std_padded":   []byte("ab"),
+		"std_raw":      []byte("abcd"),
+		"url_raw":      {0xfb, 0xff, 0xbf, 0x61},
+		"url_padded":   {0xfb, 0xff},
+		"cyrillic_raw": []byte("\u0418\u0432\u0430\u043d \u044f"),
+	}
+	encoded := map[string]string{
+		"std_padded":   base64.StdEncoding.EncodeToString(values["std_padded"]),
+		"std_raw":      base64.RawStdEncoding.EncodeToString(values["std_raw"]),
+		"url_raw":      base64.RawURLEncoding.EncodeToString(values["url_raw"]),
+		"url_padded":   base64.URLEncoding.EncodeToString(values["url_padded"]),
+		"cyrillic_raw": base64.RawURLEncoding.EncodeToString(values["cyrillic_raw"]),
+	}
+
+	s := newStand(t, nil)
+	s.client.activate("p-client", []string{"MERCHANT"}, map[string]any{
+		"urn:zitadel:iam:user:metadata": encoded,
+	})
+
+	principal, err := s.verifier(t, false).Verify(context.Background(), jwtFor(s.client.server.URL))
+
+	require.NoError(t, err)
+
+	for key, value := range values {
+		require.Equal(t, string(value), principal.Metadata[key], key)
+	}
+}
+
+func TestVerify_MalformedMetadataValueIsDroppedNotProviderError(t *testing.T) {
+	s := newStand(t, nil)
+	s.client.activate("p-client", []string{"MERCHANT"}, map[string]any{
+		"urn:zitadel:iam:user:metadata": map[string]string{
+			"merchant_id": base64.StdEncoding.EncodeToString([]byte("m-1")),
+			"broken":      "%%%",
+		},
+	})
+
+	principal, err := s.verifier(t, false).Verify(context.Background(), jwtFor(s.client.server.URL))
+
+	require.NoError(t, err)
+	require.Equal(t, "m-1", principal.Metadata["merchant_id"])
+	_, present := principal.Metadata["broken"]
+	require.False(t, present)
+}
+
 func TestVerify_CachesPositiveAndNegative(t *testing.T) {
 	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
 	clock := func() time.Time { return now }

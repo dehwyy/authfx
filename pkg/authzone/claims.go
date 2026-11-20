@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -178,20 +179,34 @@ func readMetadata(
 	)
 
 	for key, value := range encoded {
-		decoded, err := base64.StdEncoding.DecodeString(value)
-		if err != nil {
-			return fmt.Errorf(
-				"%w: invalid %s metadata: %w",
-				ErrProvider,
-				key,
-				err,
-			)
+		decoded, ok := decodeMetadataValue(value)
+		if !ok {
+			continue
 		}
 
-		parsed.metadata[key] = string(decoded)
+		parsed.metadata[key] = decoded
 	}
 
 	return nil
+}
+
+func decodeMetadataValue(value string) (string, bool) {
+	trimmed := strings.TrimRight(
+		value,
+		"=",
+	)
+
+	for _, encoding := range []*base64.Encoding{
+		base64.RawURLEncoding,
+		base64.RawStdEncoding,
+	} {
+		decoded, err := encoding.DecodeString(trimmed)
+		if err == nil {
+			return string(decoded), true
+		}
+	}
+
+	return "", false
 }
 
 func readRoles(
